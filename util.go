@@ -31,7 +31,11 @@ func randomString(count int) string {
 	const chars = "abcdefghijklmnopqrstuvwxyz1234567890"
 	result := make([]byte, count)
 	for i := 0; i < count; i++ {
-		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			fmt.Printf("randomString: crypto/rand failed: %v\n", err)
+			return ""
+		}
 		result[i] = chars[n.Int64()]
 	}
 	return string(result)
@@ -79,7 +83,7 @@ func checkUser(cfg *Config, host, username, password string) bool {
 		fmt.Printf("WARNING: account %s has empty TOTP secret, login denied\n", username)
 		return false
 	}
-	rv, _ :=  totp.ValidateCustom(
+	rv, err :=  totp.ValidateCustom(
 		password,
 		acct.TOTPSecret,
 		time.Now(),
@@ -90,8 +94,14 @@ func checkUser(cfg *Config, host, username, password string) bool {
 			Algorithm: otp.AlgorithmSHA1,
 		},
 	)
+	if err != nil {
+		fmt.Printf("TOTP validation error for %s: %v\n", username, err)
+		return false
+	}
 	return rv
 }
+
+var notifyClient = &http.Client{Timeout: 10 * time.Second}
 
 func sendNotify(cfg *Config, text string) {
 	if cfg.LoginNotify == "" {
@@ -99,7 +109,7 @@ func sendNotify(cfg *Config, text string) {
 	}
 	go func() {
 		u := cfg.LoginNotify + url.QueryEscape(text)
-		resp, err := http.Get(u)
+		resp, err := notifyClient.Get(u)
 		if err != nil {
 			fmt.Printf("通知發送失敗: %v\n", err)
 			return
@@ -124,7 +134,7 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 		return false
 	}
 
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Type", "application/json")
 
 	cookies := []string{
 		fmt.Sprintf("proxysession=%s;path=/;Expires=%s;httpOnly;Secure;SameSite=Lax", proxySession, cookieExpires),
@@ -136,7 +146,11 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 	}
 
 	resp := map[string]string{"code": "1", "data": getPrefixURL(cfg, host, "exroot")}
-	data, _ := json.Marshal(resp)
+	data, err := json.Marshal(resp)
+	if err != nil {
+		fmt.Printf("loginSuccess: json marshal failed: %v\n", err)
+		return false
+	}
 	w.Write(data)
 	return true
 }

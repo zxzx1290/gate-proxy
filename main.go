@@ -166,7 +166,13 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 
 	// extend 路由
 	if pathname == getPrefixURL(h.cfg, host, "extend") {
-		decoded, _ := base64.StdEncoding.DecodeString(reply)
+		decoded, err := base64.StdEncoding.DecodeString(reply)
+		if err != nil {
+			fmt.Printf("extend: base64 decode failed: %v\n", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("error occur"))
+			return
+		}
 		username := string(decoded)
 		sendNotify(h.cfg, username+" 於 "+ip+" 延長登入 "+host+"\r\nsession "+sessionKey[:5])
 
@@ -191,9 +197,15 @@ func (h *ProxyHandler) handleLogout(w http.ResponseWriter, r *http.Request, host
 	reason := r.URL.Query().Get("reason")
 	sessionScript := ""
 	if reason != "" {
-		reasonJSON, _ := json.Marshal(reason)
-		sessionScript = fmt.Sprintf("sessionStorage.setItem('reason', %s);", string(reasonJSON))
+		reasonJSON, err := json.Marshal(reason)
+		if err != nil {
+			fmt.Printf("logout: json marshal reason failed: %v\n", err)
+		} else {
+			sessionScript = fmt.Sprintf("sessionStorage.setItem('reason', %s);", string(reasonJSON))
+		}
 	}
+
+	redirectURL := getPrefixURL(h.cfg, host, "exroot")
 
 	w.Header().Set("Content-Type", "text/html")
 	for _, c := range expiredCookies {
@@ -202,7 +214,7 @@ func (h *ProxyHandler) handleLogout(w http.ResponseWriter, r *http.Request, host
 	w.Write([]byte(
 		"<script>" +
 			sessionScript +
-			`window.location.href="` + getPrefixURL(h.cfg, host, "exroot") + `";` +
+			`window.location.href="` + redirectURL + `";` +
 			"</script>",
 	))
 
@@ -249,7 +261,7 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 	rememberMe := r.FormValue("rememberme") == "true"
 
 	if username == "" || password == "" {
-		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"code": "3"})
 		return
 	}
@@ -279,7 +291,7 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 		h.rc.IncrWithExpire(md5Hash(ip), 86400)
 		banReply, _, _ := h.rc.Get(md5Hash(ip))
 
-		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"code": "2", "data": banReply})
 
 		sendNotify(h.cfg, username+" 於 "+ip+" 登入 "+host+" 失敗")
