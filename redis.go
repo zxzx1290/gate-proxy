@@ -58,9 +58,17 @@ func (rc *RedisClient) Del(key string) error {
 	return rc.client.Del(rc.ctx, key).Err()
 }
 
-// Incr 遞增 key 並回傳新值
-func (rc *RedisClient) Incr(key string) (int64, error) {
-	return rc.client.Incr(rc.ctx, key).Result()
+// IncrWithExpire 遞增 key 並設定過期秒數（僅在 key 無 TTL 時設定）
+func (rc *RedisClient) IncrWithExpire(key string, seconds int) (int64, error) {
+	val, err := rc.client.Incr(rc.ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	// 只在第一次（val==1）時設定 TTL，避免每次重置倒數
+	if val == 1 {
+		rc.client.Expire(rc.ctx, key, time.Duration(seconds)*time.Second)
+	}
+	return val, nil
 }
 
 // TTL 取得 key 的剩餘秒數

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"os"
 	"strings"
 )
@@ -20,11 +21,11 @@ func NewView(templatePath string) (*View, error) {
 
 func (v *View) Render(host, ip, pathname string, count int, loginURL string) string {
 	r := strings.NewReplacer(
-		"<?= host ?>", host,
-		"<?= ip ?>", ip,
-		"<?= pathname ?>", pathname,
+		"<?= host ?>", html.EscapeString(host),
+		"<?= ip ?>", html.EscapeString(ip),
+		"<?= pathname ?>", html.EscapeString(pathname),
 		"<?= count ?>", fmt.Sprintf("%d", count),
-		"<?= loginurl ?>", loginURL,
+		"<?= loginurl ?>", html.EscapeString(loginURL),
 	)
 	return r.Replace(v.template)
 }
