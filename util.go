@@ -76,8 +76,8 @@ func checkUser(cfg *Config, host, username, password string) bool {
 		return false
 	}
 	if acct.TOTPSecret == "" {
-		// 測試用：secret 為空時不驗證 TOTP
-		return true
+		fmt.Printf("WARNING: account %s has empty TOTP secret, login denied\n", username)
+		return false
 	}
 	rv, _ :=  totp.ValidateCustom(
 		password,
@@ -127,9 +127,9 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 	w.Header().Set("Content-Type", "text/html")
 
 	cookies := []string{
-		fmt.Sprintf("proxysession=%s;path=/;Expires=%s;httpOnly;Secure", proxySession, cookieExpires),
-		fmt.Sprintf("proxyuser=%s;path=/;Expires=%s;", username, cookieExpires),
-		fmt.Sprintf("proxyhash=%s;path=/;Expires=%s;", md5Hash(username+cfg.UserSalt), cookieExpires),
+		fmt.Sprintf("proxysession=%s;path=/;Expires=%s;httpOnly;Secure;SameSite=Lax", proxySession, cookieExpires),
+		fmt.Sprintf("proxyuser=%s;path=/;Expires=%s;httpOnly;Secure;SameSite=Lax", username, cookieExpires),
+		fmt.Sprintf("proxyhash=%s;path=/;Expires=%s;httpOnly;Secure;SameSite=Lax", md5Hash(username+cfg.UserSalt), cookieExpires),
 	}
 	for _, c := range cookies {
 		w.Header().Add("Set-Cookie", c)

@@ -119,6 +119,13 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 		backendConn.Write(buffered)
 	}
 
+	// 追蹤 WebSocket 連線，以便 logout 時清除
+	sessionKey := r.Header.Get("X-Proxy-Session-Key")
+	socketID := fmt.Sprintf("%s-%p", domain, clientConn)
+	if sessionKey != "" {
+		t.SetWebSocket(sessionKey, clientConn, socketID)
+	}
+
 	// 雙向 pipe
 	go func() {
 		io.Copy(backendConn, clientConn)
@@ -127,6 +134,16 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 	go func() {
 		io.Copy(clientConn, backendConn)
 		clientConn.Close()
+		if sessionKey != "" {
+			t.wsMu.Lock()
+			if sockets, ok := t.websockets[sessionKey]; ok {
+				delete(sockets, socketID)
+				if len(sockets) == 0 {
+					delete(t.websockets, sessionKey)
+				}
+			}
+			t.wsMu.Unlock()
+		}
 	}()
 
 	return true

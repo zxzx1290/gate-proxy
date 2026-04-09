@@ -79,6 +79,7 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 檢查 IP 是否被封鎖
 	banReply, banExists, err := h.rc.Get(md5Hash(ip))
 	if err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte("auth unavailable"))
 		fmt.Printf("auth unavailable: %v\n", err)
 		return
@@ -86,7 +87,8 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if banExists {
 		banCount, _ := strconv.Atoi(banReply)
 		if banCount >= h.cfg.MaxRetry {
-			w.Write([]byte("banned ip " + ip))
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("access denied"))
 			fmt.Printf("banned ip %s\n", ip)
 			return
 		}
@@ -120,26 +122,28 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 	}
 
 	if !exists {
-		// session 不存在
-		h.rc.Incr(md5Hash(ip))
-		banReply, _, _ := h.rc.Get(md5Hash(ip))
-
-		expiredCookie := expireCookieHeader()
+		// session 不存在（過期），不應增加 ban 計數，避免正常使用者被封鎖
+		expiredCookie := expireCookieHeaders()
 
 		if pathname == getPrefixURL(h.cfg, host, "check") {
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Set-Cookie", expiredCookie)
+			for _, c := range expiredCookie {
+				w.Header().Add("Set-Cookie", c)
+			}
 			json.NewEncoder(w).Encode(map[string]string{"status": "false", "data": "session expire"})
 			return
 		}
 
+		banReply, _, _ := h.rc.Get(md5Hash(ip))
 		count := 0
 		if banReply != "" {
 			count, _ = strconv.Atoi(banReply)
 		}
 
 		w.Header().Set("Content-Type", "text/html")
-		w.Header().Set("Set-Cookie", expiredCookie)
+		for _, c := range expiredCookie {
+			w.Header().Add("Set-Cookie", c)
+		}
 		w.Write([]byte(h.view.Render(host, ip, pathname, count, getPrefixURL(h.cfg, host, "exlogin"))))
 
 		sendNotify(h.cfg, ip+" 連接 "+host+" session過期")
@@ -182,7 +186,7 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 }
 
 func (h *ProxyHandler) handleLogout(w http.ResponseWriter, r *http.Request, host, session string, cookies map[string]string) {
-	expiredCookie := expireCookieHeader()
+	expiredCookies := expireCookieHeaders()
 
 	reason := r.URL.Query().Get("reason")
 	sessionScript := ""
@@ -192,7 +196,9 @@ func (h *ProxyHandler) handleLogout(w http.ResponseWriter, r *http.Request, host
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Set-Cookie", expiredCookie)
+	for _, c := range expiredCookies {
+		w.Header().Add("Set-Cookie", c)
+	}
 	w.Write([]byte(
 		"<script>" +
 			sessionScript +
@@ -269,8 +275,8 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 			fmt.Println("process login failed")
 		}
 	} else {
-		// 登入失敗
-		h.rc.Incr(md5Hash(ip))
+		// 登入失敗（ban 記錄 1 小時後自動過期）
+		h.rc.IncrWithExpire(md5Hash(ip), 3600)
 		banReply, _, _ := h.rc.Get(md5Hash(ip))
 
 		w.Header().Set("Content-Type", "text/html")
@@ -282,7 +288,12 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 
 func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, ip, host string, cookies map[string]string) {
 	// 檢查 IP ban
-	banReply, banExists, _ := h.rc.Get(md5Hash(ip))
+	banReply, banExists, err := h.rc.Get(md5Hash(ip))
+	if err != nil {
+		http.Error(w, "auth unavailable", http.StatusServiceUnavailable)
+		fmt.Printf("WebSocket auth unavailable: %v\n", err)
+		return
+	}
 	if banExists {
 		banCount, _ := strconv.Atoi(banReply)
 		if banCount >= h.cfg.MaxRetry {
@@ -300,13 +311,19 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 	}
 
 	key := sha512Hash(session + host + h.cfg.Secret)
-	reply, exists, _ := h.rc.Get(key)
+	reply, exists, err2 := h.rc.Get(key)
+	if err2 != nil {
+		http.Error(w, "auth unavailable", http.StatusServiceUnavailable)
+		fmt.Printf("WebSocket session check failed: %v\n", err2)
+		return
+	}
 	if !exists {
 		http.Error(w, "You are banned", http.StatusForbidden)
 		fmt.Println("You are banned")
 		return
 	}
 
+	r.Header.Set("X-Proxy-Session-Key", key)
 	if h.tunnel.PassWebSocket(host, reply, w, r) {
 		// WebSocket 連線已交由 tunnel 處理
 	} else {
@@ -326,11 +343,22 @@ func parseCookies(r *http.Request) map[string]string {
 }
 
 func isWebSocketUpgrade(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("Connection"), "Upgrade") &&
-		strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+	connHeader := r.Header.Get("Connection")
+	hasUpgrade := false
+	for _, v := range strings.Split(connHeader, ",") {
+		if strings.EqualFold(strings.TrimSpace(v), "Upgrade") {
+			hasUpgrade = true
+			break
+		}
+	}
+	return hasUpgrade && strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 }
 
-func expireCookieHeader() string {
+func expireCookieHeaders() []string {
 	t := time.Now().Add(-5 * 24 * time.Hour).UTC().Format(http.TimeFormat)
-	return "proxysession=;path=/;Expires=" + t + ";httpOnly;Secure"
+	return []string{
+		"proxysession=;path=/;Expires=" + t + ";httpOnly;Secure;SameSite=Lax",
+		"proxyuser=;path=/;Expires=" + t + ";httpOnly;Secure;SameSite=Lax",
+		"proxyhash=;path=/;Expires=" + t + ";httpOnly;Secure;SameSite=Lax",
+	}
 }
