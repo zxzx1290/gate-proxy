@@ -275,8 +275,8 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 			fmt.Println("process login failed")
 		}
 	} else {
-		// 登入失敗（ban 記錄 1 小時後自動過期）
-		h.rc.IncrWithExpire(md5Hash(ip), 3600)
+		// 登入失敗（ban 記錄 24 小時後自動過期）
+		h.rc.IncrWithExpire(md5Hash(ip), 86400)
 		banReply, _, _ := h.rc.Get(md5Hash(ip))
 
 		w.Header().Set("Content-Type", "text/html")
