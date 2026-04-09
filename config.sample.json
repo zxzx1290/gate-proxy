@@ -1,0 +1,44 @@
+{
+    "template": "template.html",
+    "loginNotify": "https://notify.example.com/?text=",
+    "secret": "THE_KEY",
+    "userSalt": "THE_SALT",
+    "maxRetry": 3,
+    "redisAddr": "127.0.0.1:6379",
+    "redisPassword": "THE_PASSWORD",
+    "defaultLoginAliveSec": 86400,
+    "longLoginAliveSec": 604800,
+    "port": 9090,
+    "frontendTunnel": {
+        "login.example.com": {
+            "exroot": "/",
+            "exlogin": "/login",
+            "login": "/login",
+            "logout": "/logout",
+            "check": "/check",
+            "extend": "/extend",
+            "account": {
+                "c9": {
+                    "totpSecret": "K5BFI6ZBHFEHGRLLNBAGKYKEJ5CTIYRUPFJGK6SFJURXATSPNVKA",
+                    "backend": "backend1"
+                },
+                "guest": {
+                    "totpSecret": "FRLGSZDHORND6UZDEQYHWV2HPVTDCSLBPJ5D62LPJI5HQMTLJ43A",
+                    "backend": "backend2"
+                }
+            }
+        }
+    },
+    "backendTunnel": {
+        "backend1": {
+            "host": "localhost",
+            "forward": "localhost",
+            "port": 8888
+        },
+        "backend2": {
+            "host": "localhost.com",
+            "forward": "localhost",
+            "port": 9999
+        }
+    }
+}
