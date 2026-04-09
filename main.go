@@ -14,20 +14,20 @@ import (
 func main() {
 	cfg, err := LoadConfig("config.json")
 	if err != nil {
-		fmt.Printf("載入設定失敗: %v\n", err)
+		fmt.Printf("load config failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	rc := NewRedisClient(cfg.RedisAddr, cfg.RedisPassword)
 	if err := rc.Ping(); err != nil {
-		fmt.Printf("Redis 連線失敗: %v\n", err)
+		fmt.Printf("Redis connect failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("Redis 連線成功")
+	fmt.Println("Redis connect success")
 
 	view, err := NewView(cfg.Template)
 	if err != nil {
-		fmt.Printf("載入模板失敗: %v\n", err)
+		fmt.Printf("load template failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -41,9 +41,9 @@ func main() {
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Port)
-	fmt.Printf("啟動伺服器於 %s\n", addr)
+	fmt.Printf("start server at %s\n", addr)
 	if err := http.ListenAndServe(addr, handler); err != nil {
-		fmt.Printf("伺服器啟動失敗: %v\n", err)
+		fmt.Printf("start server failed: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -177,9 +177,9 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 		sendNotify(h.cfg, username+" 於 "+ip+" 延長登入 "+host+"\r\nsession "+sessionKey[:5])
 
 		if loginSuccess(h.cfg, h.rc, session, username, true, host, w) {
-			fmt.Println("process relogin success")
+			fmt.Printf("process %s relogin success\n", username)
 		} else {
-			fmt.Println("process relogin failed")
+			fmt.Printf("process %s relogin failed\n", username)
 		}
 		return
 	}
@@ -282,9 +282,9 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 		h.rc.Del(md5Hash(ip))
 
 		if loginSuccess(h.cfg, h.rc, id, username, rememberMe, host, w) {
-			fmt.Println("process login success")
+			fmt.Printf("process %s login success\n", username)
 		} else {
-			fmt.Println("process login failed")
+			fmt.Printf("process %s login failed\n", username)
 		}
 	} else {
 		// 登入失敗（ban 記錄 24 小時後自動過期）

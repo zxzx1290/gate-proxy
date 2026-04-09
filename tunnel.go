@@ -194,8 +194,9 @@ func (t *Tunnel) RemoveWebSocket(session string) {
 	t.wsMu.Lock()
 	defer t.wsMu.Unlock()
 	if sockets, ok := t.websockets[session]; ok {
-		for _, conn := range sockets {
+		for id, conn := range sockets {
 			conn.Close()
+			fmt.Printf("socket id: %s close\n", id)
 		}
 		delete(t.websockets, session)
 	}
