@@ -115,8 +115,19 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 	// 如果 clientBuf 中有剩餘資料，先送到後端
 	if clientBuf.Reader.Buffered() > 0 {
 		buffered := make([]byte, clientBuf.Reader.Buffered())
-		clientBuf.Read(buffered)
-		backendConn.Write(buffered)
+		n, err := clientBuf.Read(buffered)
+		if err != nil {
+			fmt.Printf("read buffered data failed: %v\n", err)
+			clientConn.Close()
+			backendConn.Close()
+			return false
+		}
+		if _, err := backendConn.Write(buffered[:n]); err != nil {
+			fmt.Printf("write buffered data to backend failed: %v\n", err)
+			clientConn.Close()
+			backendConn.Close()
+			return false
+		}
 	}
 
 	// 追蹤 WebSocket 連線，以便 logout 時清除

@@ -66,7 +66,9 @@ func (rc *RedisClient) IncrWithExpire(key string, seconds int) (int64, error) {
 	}
 	// 只在第一次（val==1）時設定 TTL，避免每次重置倒數
 	if val == 1 {
-		rc.client.Expire(rc.ctx, key, time.Duration(seconds)*time.Second)
+		if err := rc.client.Expire(rc.ctx, key, time.Duration(seconds)*time.Second).Err(); err != nil {
+			return val, fmt.Errorf("設定 TTL 失敗: %w", err)
+		}
 	}
 	return val, nil
 }
