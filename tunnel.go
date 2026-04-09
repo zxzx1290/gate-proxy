@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -44,13 +43,13 @@ func NewTunnel(cfg *Config) *Tunnel {
 		}
 
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			log.Printf("=== proxy error === %v", err)
+			fmt.Printf("=== proxy error === %v\n", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("The website is down or error occurred"))
 		}
 
 		t.proxies[name] = proxy
-		log.Printf("init backend tunnel: %s on host %s port %d", name, bt.Host, bt.Port)
+		fmt.Printf("init backend tunnel: %s on host %s port %d\n", name, bt.Host, bt.Port)
 	}
 
 	return t
@@ -64,7 +63,7 @@ func (t *Tunnel) PassProxy(domain, reply string, w http.ResponseWriter, r *http.
 	}
 	proxy, ok := t.proxies[backendName]
 	if !ok {
-		log.Printf("unknown tunnel: %s", backendName)
+		fmt.Printf("unknown tunnel: %s\n", backendName)
 		return false
 	}
 	proxy.ServeHTTP(w, r)
@@ -79,19 +78,19 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 	}
 	bt, ok := t.backends[backendName]
 	if !ok {
-		log.Printf("unknown tunnel: %s", backendName)
+		fmt.Printf("unknown tunnel: %s\n", backendName)
 		return false
 	}
 
 	// hijack client 連線
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		log.Printf("server doesn't support hijacking")
+		fmt.Println("server doesn't support hijacking")
 		return false
 	}
 	clientConn, clientBuf, err := hj.Hijack()
 	if err != nil {
-		log.Printf("hijack failed: %v", err)
+		fmt.Printf("hijack failed: %v\n", err)
 		return false
 	}
 
@@ -99,7 +98,7 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 	backendAddr := fmt.Sprintf("%s:%d", bt.Forward, bt.Port)
 	backendConn, err := net.Dial("tcp", backendAddr)
 	if err != nil {
-		log.Printf("dial backend %s failed: %v", backendAddr, err)
+		fmt.Printf("dial backend %s failed: %v\n", backendAddr, err)
 		clientConn.Close()
 		return false
 	}
@@ -107,7 +106,7 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 	// 將原始 request 轉送到後端（改寫 Host）
 	r.Host = bt.Host
 	if err := r.Write(backendConn); err != nil {
-		log.Printf("write request to backend failed: %v", err)
+		fmt.Printf("write request to backend failed: %v\n", err)
 		clientConn.Close()
 		backendConn.Close()
 		return false
@@ -136,18 +135,18 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 func (t *Tunnel) resolveBackend(domain, reply string) string {
 	ft, ok := t.cfg.FrontendTunnel[domain]
 	if !ok {
-		log.Printf("domain %s not found", domain)
+		fmt.Printf("domain %s not found\n", domain)
 		return ""
 	}
 	decoded, err := base64.StdEncoding.DecodeString(reply)
 	if err != nil {
-		log.Printf("base64 decode failed: %v", err)
+		fmt.Printf("base64 decode failed: %v\n", err)
 		return ""
 	}
 	username := string(decoded)
 	acct, ok := ft.Account[username]
 	if !ok {
-		log.Printf("domain %s account %s can't find backend", domain, username)
+		fmt.Printf("domain %s account %s can't find backend\n", domain, username)
 		return ""
 	}
 	return acct.Backend
@@ -160,7 +159,7 @@ func (t *Tunnel) SetWebSocket(session string, conn net.Conn, socketID string) {
 		t.websockets[session] = make(map[string]net.Conn)
 	}
 	t.websockets[session][socketID] = conn
-	log.Printf("socket id: %s set ok", socketID)
+	fmt.Printf("socket id: %s set ok\n", socketID)
 }
 
 func (t *Tunnel) RemoveWebSocket(session string) {

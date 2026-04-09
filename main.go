@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,18 +14,21 @@ import (
 func main() {
 	cfg, err := LoadConfig("config.json")
 	if err != nil {
-		log.Fatalf("載入設定失敗: %v", err)
+		fmt.Printf("載入設定失敗: %v\n", err)
+		os.Exit(1)
 	}
 
 	rc := NewRedisClient(cfg.RedisAddr, cfg.RedisPassword)
 	if err := rc.Ping(); err != nil {
-		log.Fatalf("Redis 連線失敗: %v", err)
+		fmt.Printf("Redis 連線失敗: %v\n", err)
+		os.Exit(1)
 	}
-	log.Println("Redis 連線成功")
+	fmt.Println("Redis 連線成功")
 
 	view, err := NewView(cfg.Template)
 	if err != nil {
-		log.Fatalf("載入模板失敗: %v", err)
+		fmt.Printf("載入模板失敗: %v\n", err)
+		os.Exit(1)
 	}
 
 	tunnel := NewTunnel(cfg)
@@ -38,9 +41,10 @@ func main() {
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Port)
-	log.Printf("啟動伺服器於 %s", addr)
+	fmt.Printf("啟動伺服器於 %s\n", addr)
 	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatalf("伺服器啟動失敗: %v", err)
+		fmt.Printf("伺服器啟動失敗: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -76,14 +80,14 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	banReply, banExists, err := h.rc.Get(md5Hash(ip))
 	if err != nil {
 		w.Write([]byte("auth unavailable"))
-		log.Printf("auth unavailable: %v", err)
+		fmt.Printf("auth unavailable: %v\n", err)
 		return
 	}
 	if banExists {
 		banCount, _ := strconv.Atoi(banReply)
 		if banCount >= h.cfg.MaxRetry {
 			w.Write([]byte("banned ip " + ip))
-			log.Printf("banned ip %s", ip)
+			fmt.Printf("banned ip %s\n", ip)
 			return
 		}
 	}
@@ -163,9 +167,9 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 		sendNotify(h.cfg, username+" 於 "+ip+" 延長登入 "+host+"\r\nsession "+sessionKey[:5])
 
 		if loginSuccess(h.cfg, h.rc, session, username, true, host, w) {
-			log.Println("process relogin success")
+			fmt.Println("process relogin success")
 		} else {
-			log.Println("process relogin failed")
+			fmt.Println("process relogin failed")
 		}
 		return
 	}
@@ -260,9 +264,9 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 		h.rc.Del(md5Hash(ip))
 
 		if loginSuccess(h.cfg, h.rc, id, username, rememberMe, host, w) {
-			log.Println("process login success")
+			fmt.Println("process login success")
 		} else {
-			log.Println("process login failed")
+			fmt.Println("process login failed")
 		}
 	} else {
 		// 登入失敗
@@ -283,7 +287,7 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 		banCount, _ := strconv.Atoi(banReply)
 		if banCount >= h.cfg.MaxRetry {
 			http.Error(w, "You are banned", http.StatusForbidden)
-			log.Println("You are banned")
+			fmt.Println("You are banned")
 			return
 		}
 	}
@@ -291,7 +295,7 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 	session := cookies["proxysession"]
 	if session == "" {
 		http.Error(w, "You are not allowed", http.StatusForbidden)
-		log.Println("You are not allowed")
+		fmt.Println("You are not allowed")
 		return
 	}
 
@@ -299,7 +303,7 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 	reply, exists, _ := h.rc.Get(key)
 	if !exists {
 		http.Error(w, "You are banned", http.StatusForbidden)
-		log.Println("You are banned")
+		fmt.Println("You are banned")
 		return
 	}
 
@@ -307,7 +311,7 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 		// WebSocket 連線已交由 tunnel 處理
 	} else {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		log.Println("passProxy error")
+		fmt.Println("passProxy error")
 	}
 }
 

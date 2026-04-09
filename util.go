@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -41,7 +40,7 @@ func randomString(count int) string {
 func getPrefixURL(cfg *Config, domain, urlType string) string {
 	ft, ok := cfg.FrontendTunnel[domain]
 	if !ok {
-		log.Printf("%s: not found", domain)
+		fmt.Printf("%s: not found\n", domain)
 		return "/"
 	}
 	switch urlType {
@@ -102,7 +101,7 @@ func sendNotify(cfg *Config, text string) {
 		u := cfg.LoginNotify + url.QueryEscape(text)
 		resp, err := http.Get(u)
 		if err != nil {
-			log.Printf("通知發送失敗: %v", err)
+			fmt.Printf("通知發送失敗: %v\n", err)
 			return
 		}
 		resp.Body.Close()
@@ -121,7 +120,7 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 	usernameB64 := base64.StdEncoding.EncodeToString([]byte(username))
 
 	if err := rc.SetEX(redisKey, usernameB64, aliveSec); err != nil {
-		log.Printf("Redis SET 失敗: %v", err)
+		fmt.Printf("Redis SET 失敗: %v\n", err)
 		return false
 	}
 
