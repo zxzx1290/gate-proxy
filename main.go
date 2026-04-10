@@ -369,8 +369,8 @@ func isWebSocketUpgrade(r *http.Request) bool {
 func expireCookieHeaders() []string {
 	t := time.Now().Add(-5 * 24 * time.Hour).UTC().Format(http.TimeFormat)
 	return []string{
-		"proxysession=;path=/;Expires=" + t + ";httpOnly;Secure;SameSite=Lax",
-		"proxyuser=;path=/;Expires=" + t + ";httpOnly;Secure;SameSite=Lax",
-		"proxyhash=;path=/;Expires=" + t + ";httpOnly;Secure;SameSite=Lax",
+		"proxysession=;path=/;Expires=" + t + ";Secure;SameSite=Lax",
+		"proxyuser=;path=/;Expires=" + t + ";Secure;SameSite=Lax",
+		"proxyhash=;path=/;Expires=" + t + ";Secure;SameSite=Lax",
 	}
 }

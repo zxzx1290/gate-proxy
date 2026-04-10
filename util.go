@@ -137,9 +137,9 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 	w.Header().Set("Content-Type", "application/json")
 
 	cookies := []string{
-		fmt.Sprintf("proxysession=%s;path=/;Expires=%s;httpOnly;Secure;SameSite=Lax", proxySession, cookieExpires),
-		fmt.Sprintf("proxyuser=%s;path=/;Expires=%s;httpOnly;Secure;SameSite=Lax", username, cookieExpires),
-		fmt.Sprintf("proxyhash=%s;path=/;Expires=%s;httpOnly;Secure;SameSite=Lax", md5Hash(username+cfg.UserSalt), cookieExpires),
+		fmt.Sprintf("proxysession=%s;path=/;Expires=%s;Secure;SameSite=Lax", proxySession, cookieExpires),
+		fmt.Sprintf("proxyuser=%s;path=/;Expires=%s;Secure;SameSite=Lax", username, cookieExpires),
+		fmt.Sprintf("proxyhash=%s;path=/;Expires=%s;Secure;SameSite=Lax", md5Hash(username+cfg.UserSalt), cookieExpires),
 	}
 	for _, c := range cookies {
 		w.Header().Add("Set-Cookie", c)
