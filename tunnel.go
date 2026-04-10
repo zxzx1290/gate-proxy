@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"sync"
+	"time"
 )
 
 type Tunnel struct {
@@ -94,6 +95,12 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 		return false
 	}
 
+	// 啟用 client TCP keepalive，偵測非正常斷線
+	if tcpConn, ok := clientConn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+	}
+
 	// 連到後端
 	backendAddr := fmt.Sprintf("%s:%d", bt.Forward, bt.Port)
 	backendConn, err := net.Dial("tcp", backendAddr)
@@ -101,6 +108,12 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 		fmt.Printf("dial backend %s failed: %v\n", backendAddr, err)
 		clientConn.Close()
 		return false
+	}
+
+	// 啟用 backend TCP keepalive
+	if tcpConn, ok := backendConn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
 
 	// 將原始 request 轉送到後端（改寫 Host）
@@ -149,6 +162,7 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 			t.wsMu.Lock()
 			if sockets, ok := t.websockets[sessionKey]; ok {
 				delete(sockets, socketID)
+				fmt.Printf("socket id: %s close by tcp\n", socketID)
 				if len(sockets) == 0 {
 					delete(t.websockets, sessionKey)
 				}
@@ -196,7 +210,7 @@ func (t *Tunnel) RemoveWebSocket(session string) {
 	if sockets, ok := t.websockets[session]; ok {
 		for id, conn := range sockets {
 			conn.Close()
-			fmt.Printf("socket id: %s close\n", id)
+			fmt.Printf("socket id: %s close by logout\n", id)
 		}
 		delete(t.websockets, session)
 	}
