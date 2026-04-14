@@ -261,46 +261,63 @@ input.fashion[type="checkbox"] + label.fashion:hover:before {
             return;
         }
 
-        ajaxsend.post("<?= loginurl ?>", {'username': document.getElementsByName('username')[0].value, 'password': document.getElementsByName('password')[0].value, 'rememberme': (document.getElementsByName('rememberme')[0].checked) ? 'true' : 'false'})
-        .before(function() {
-            document.querySelector('form').style.display = 'none';
-            document.querySelector('.spinner').style.display = 'block';
+        const formData = new URLSearchParams({
+            username: document.getElementsByName('username')[0].value,
+            password: document.getElementsByName('password')[0].value,
+            rememberme: document.getElementsByName('rememberme')[0].checked ? 'true' : 'false'
+        });
+
+        document.querySelector('form').style.display = 'none';
+        document.querySelector('.spinner').style.display = 'block';
+
+        fetch("<?= loginurl ?>", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData
         })
-        .send()
-        .success(function(info) {
+        .then(response => response.text())
+        .then(info => {
+            let data;
             try {
-                var data = JSON.parse(info);
+                data = JSON.parse(info);
             } catch(e) {
-                var data = {"code":"99"};
+                data = { code: '99' };
             }
+
             switch (data['code']) {
                 case '1':
                     window.location.href = data['data'];
                     break;
                 case '2':
-                case '3':
-                    document.querySelector(".logo div").innerHTML = data['data'];
-                    document.querySelector(".logo div").style.display = 'block';
-                    if(parseInt(data['data'],10) > 3){
+                    document.querySelector('.logo div').innerHTML = data['data'];
+                    document.querySelector('.logo div').style.display = 'block';
+                    if (parseInt(data['data'], 10) > 3) {
                         window.location.reload();
                     }
+                    break;
+                case '3':
+                    document.querySelector('.logo div').style.display = 'none';
                     break;
                 default:
                     alert('系統錯誤，請重試');
                     console.log(data);
             }
-            if (data['code'] !== "1") {
+
+            if (data['code'] !== '1') {
                 document.querySelector('.spinner').style.display = 'none';
                 document.querySelector('form').style.display = 'block';
             }
         })
-        .error(function(e) {
+        .catch(e => {
             alert('系統錯誤，請重試');
             console.log(e);
+            document.querySelector('.spinner').style.display = 'none';
+            document.querySelector('form').style.display = 'block';
         });
     });
 })();
 </script>
-<script type="text/javascript" src="https://testused.com/static/ajaxsend.js"></script>
 </body>
 </html>

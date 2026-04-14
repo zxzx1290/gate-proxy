@@ -262,7 +262,7 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 
 	if username == "" || password == "" {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"code": "3"})
+		json.NewEncoder(w).Encode(map[string]string{"code": "3", "data": ""})
 		return
 	}
 
