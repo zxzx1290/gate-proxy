@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gateproxy/uuidv7"
 )
 
 func main() {
@@ -270,7 +269,7 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 
 	if checkUser(h.cfg, host, username, password) {
 		// 登入成功
-		id := uuidv7.New()
+		id := rand.Text()
 		if id == "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("generate ID fail"))
