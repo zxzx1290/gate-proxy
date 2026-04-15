@@ -269,12 +269,7 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 
 	if checkUser(h.cfg, host, username, password) {
 		// 登入成功
-		id := rand.Text()
-		if id == "" {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("generate ID fail"))
-			return
-		}
+		id := strings.ToLower(rand.Text())
 
 		redisKey := sha256Hash(id + host + h.cfg.Secret)
 		sendNotify(h.cfg, username+" 於 "+ip+" 登入 "+host+"\r\nsession "+redisKey[:5])
