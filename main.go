@@ -268,7 +268,7 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 
 	if checkUser(h.cfg, host, username, password) {
 		// 登入成功
-		id := sha512Hash(randomString(32) + fmt.Sprintf("%d", time.Now().UnixNano()))
+		id := sha256Hash(randomString(32) + fmt.Sprintf("%d", time.Now().UnixNano()))
 		if id == "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("generate ID fail"))

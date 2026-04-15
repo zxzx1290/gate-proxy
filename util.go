@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -22,11 +21,6 @@ import (
 
 func md5Hash(data string) string {
 	h := md5.Sum([]byte(data))
-	return fmt.Sprintf("%x", h)
-}
-
-func sha512Hash(data string) string {
-	h := sha512.Sum512([]byte(data))
 	return fmt.Sprintf("%x", h)
 }
 
