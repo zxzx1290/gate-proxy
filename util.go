@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -25,8 +24,8 @@ func md5Hash(data string) string {
 	return fmt.Sprintf("%x", h)
 }
 
-func sha512Hash(data string) string {
-	h := sha512.Sum512([]byte(data))
+func sha256Hash(data string) string {
+	h := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", h)
 }
 
@@ -135,7 +134,7 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 		cookieExpires = time.Now().Add(time.Duration(aliveSec) * time.Second).UTC().Format(http.TimeFormat)
 	}
 
-	redisKey := sha512Hash(proxySession + host + cfg.Secret)
+	redisKey := sha256Hash(proxySession + host + cfg.Secret)
 	usernameB64 := base64.StdEncoding.EncodeToString([]byte(username))
 
 	if err := rc.SetEX(redisKey, usernameB64, aliveSec); err != nil {

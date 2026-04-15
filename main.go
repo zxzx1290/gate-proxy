@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gateproxy/uuidv7"
 )
 
 func main() {
@@ -113,7 +115,7 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 	}
 
 	// 驗證 session
-	sessionKey := sha512Hash(session + host + h.cfg.Secret)
+	sessionKey := sha256Hash(session + host + h.cfg.Secret)
 	reply, exists, err := h.rc.Get(sessionKey)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -219,7 +221,7 @@ func (h *ProxyHandler) handleLogout(w http.ResponseWriter, r *http.Request, host
 	))
 
 	if session != "" {
-		key := sha512Hash(session + host + h.cfg.Secret)
+		key := sha256Hash(session + host + h.cfg.Secret)
 		h.tunnel.RemoveWebSocket(key)
 		h.rc.Del(key)
 	}
@@ -268,14 +270,14 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 
 	if checkUser(h.cfg, host, username, password) {
 		// 登入成功
-		id := sha512Hash(randomString(32) + fmt.Sprintf("%d", time.Now().UnixNano()))
+		id := uuidv7.New()
 		if id == "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("generate ID fail"))
 			return
 		}
 
-		redisKey := sha512Hash(id + host + h.cfg.Secret)
+		redisKey := sha256Hash(id + host + h.cfg.Secret)
 		sendNotify(h.cfg, username+" 於 "+ip+" 登入 "+host+"\r\nsession "+redisKey[:5])
 
 		// 清除 ban 記錄
@@ -322,7 +324,7 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	key := sha512Hash(session + host + h.cfg.Secret)
+	key := sha256Hash(session + host + h.cfg.Secret)
 	reply, exists, err2 := h.rc.Get(key)
 	if err2 != nil {
 		http.Error(w, "auth unavailable", http.StatusServiceUnavailable)
