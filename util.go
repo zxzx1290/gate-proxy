@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -25,6 +28,12 @@ func md5Hash(data string) string {
 func sha512Hash(data string) string {
 	h := sha512.Sum512([]byte(data))
 	return fmt.Sprintf("%x", h)
+}
+
+func hmacSHA256(message, key string) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	mac.Write([]byte(message))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func randomString(count int) string {
@@ -139,7 +148,7 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 	cookies := []string{
 		fmt.Sprintf("proxysession=%s;path=/;Expires=%s;Secure;SameSite=Lax", proxySession, cookieExpires),
 		fmt.Sprintf("proxyuser=%s;path=/;Expires=%s;Secure;SameSite=Lax", username, cookieExpires),
-		fmt.Sprintf("proxyhash=%s;path=/;Expires=%s;Secure;SameSite=Lax", md5Hash(username+cfg.UserSalt), cookieExpires),
+		fmt.Sprintf("proxyhash=%s;path=/;Expires=%s;Secure;SameSite=Lax", hmacSHA256(username, cfg.WebSocketLoginSecret), cookieExpires),
 	}
 	for _, c := range cookies {
 		w.Header().Add("Set-Cookie", c)

@@ -32,6 +32,7 @@ type Config struct {
 	LoginNotify         string                     `json:"loginNotify"`
 	Secret              string                     `json:"secret"`
 	UserSalt            string                     `json:"userSalt"`
+	WebSocketLoginSecret string                    `json:"webSocketLoginSecret"`
 	MaxRetry            int                        `json:"maxRetry"`
 	RedisAddr           string                     `json:"redisAddr"`
 	RedisPassword       string                     `json:"redisPassword"`
