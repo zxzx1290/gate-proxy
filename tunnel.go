@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -174,18 +173,12 @@ func (t *Tunnel) PassWebSocket(domain, reply string, w http.ResponseWriter, r *h
 	return true
 }
 
-func (t *Tunnel) resolveBackend(domain, reply string) string {
+func (t *Tunnel) resolveBackend(domain, username string) string {
 	ft, ok := t.cfg.FrontendTunnel[domain]
 	if !ok {
 		fmt.Printf("domain %s not found\n", domain)
 		return ""
 	}
-	decoded, err := base64.StdEncoding.DecodeString(reply)
-	if err != nil {
-		fmt.Printf("base64 decode failed: %v\n", err)
-		return ""
-	}
-	username := string(decoded)
 	acct, ok := ft.Account[username]
 	if !ok {
 		fmt.Printf("domain %s account %s can't find backend\n", domain, username)

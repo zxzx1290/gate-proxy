@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -114,12 +113,24 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 	}
 
 	// 驗證 session
-	sessionKey := sha256Hash(session + host + h.cfg.Secret)
-	reply, exists, err := h.rc.Get(sessionKey)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("auth unavailable"))
-		return
+	var entry sessionEntry
+	exists := false
+	if validSessionFormat(session) {
+		rawReply, found, err := h.rc.Get(session)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("auth unavailable"))
+			return
+		}
+		if found {
+			if jsonErr := json.Unmarshal([]byte(rawReply), &entry); jsonErr != nil {
+				fmt.Printf("handleWithSession session decode failed: %v\n", jsonErr)
+			} else if entry.Host != host {
+				fmt.Printf("handleWithSession session host mismatch: got %s, expected %s\n", entry.Host, host)
+			} else {
+				exists = true
+			}
+		}
 	}
 
 	if !exists {
@@ -155,7 +166,7 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 
 	// check 路由
 	if pathname == getPrefixURL(h.cfg, host, "check") {
-		ttl, err := h.rc.TTL(sessionKey)
+		ttl, err := h.rc.TTL(session)
 		w.Header().Set("Content-Type", "application/json")
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]string{"status": "true", "data": "error"})
@@ -167,26 +178,18 @@ func (h *ProxyHandler) handleWithSession(w http.ResponseWriter, r *http.Request,
 
 	// extend 路由
 	if pathname == getPrefixURL(h.cfg, host, "extend") {
-		decoded, err := base64.StdEncoding.DecodeString(reply)
-		if err != nil {
-			fmt.Printf("extend: base64 decode failed: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("error occur"))
-			return
-		}
-		username := string(decoded)
-		sendNotify(h.cfg, username+" 於 "+ip+" 延長登入 "+host+"\r\nsession "+sessionKey[:5])
+		sendNotify(h.cfg, entry.Username+" 於 "+ip+" 延長登入 "+host+"\r\nsession "+session)
 
-		if loginSuccess(h.cfg, h.rc, session, username, true, host, w) {
-			fmt.Printf("process %s relogin success\n", username)
+		if loginSuccess(h.cfg, h.rc, session, entry.Username, true, host, w) {
+			fmt.Printf("process %s relogin success\n", entry.Username)
 		} else {
-			fmt.Printf("process %s relogin failed\n", username)
+			fmt.Printf("process %s relogin failed\n", entry.Username)
 		}
 		return
 	}
 
 	// 正常代理
-	if !h.tunnel.PassProxy(host, reply, w, r) {
+	if !h.tunnel.PassProxy(host, entry.Username, w, r) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("error occur"))
 	}
@@ -200,7 +203,7 @@ func (h *ProxyHandler) handleLogout(w http.ResponseWriter, r *http.Request, host
 	if reason != "" {
 		reasonJSON, err := json.Marshal(reason)
 		if err != nil {
-			fmt.Printf("logout: json marshal reason failed: %v\n", err)
+			fmt.Printf("logout json marshal reason failed: %v\n", err)
 		} else {
 			sessionScript = fmt.Sprintf("sessionStorage.setItem('reason', %s);", string(reasonJSON))
 		}
@@ -220,9 +223,8 @@ func (h *ProxyHandler) handleLogout(w http.ResponseWriter, r *http.Request, host
 	))
 
 	if session != "" {
-		key := sha256Hash(session + host + h.cfg.Secret)
-		h.tunnel.RemoveWebSocket(key)
-		h.rc.Del(key)
+		h.tunnel.RemoveWebSocket(session)
+		h.rc.Del(session)
 	}
 }
 
@@ -271,8 +273,7 @@ func (h *ProxyHandler) handleLogin(w http.ResponseWriter, r *http.Request, ip, h
 		// 登入成功
 		id := strings.ToLower(rand.Text())
 
-		redisKey := sha256Hash(id + host + h.cfg.Secret)
-		sendNotify(h.cfg, username+" 於 "+ip+" 登入 "+host+"\r\nsession "+redisKey[:5])
+		sendNotify(h.cfg, username+" 於 "+ip+" 登入 "+host+"\r\nsession "+id)
 
 		// 清除 ban 記錄
 		h.rc.Del(md5Hash(ip))
@@ -318,8 +319,13 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	key := sha256Hash(session + host + h.cfg.Secret)
-	reply, exists, err2 := h.rc.Get(key)
+	if !validSessionFormat(session) {
+		http.Error(w, "session invalid", http.StatusForbidden)
+		fmt.Println("WebSocket session invalid format")
+		return
+	}
+
+	rawReply, exists, err2 := h.rc.Get(session)
 	if err2 != nil {
 		http.Error(w, "auth unavailable", http.StatusServiceUnavailable)
 		fmt.Printf("WebSocket session check failed: %v\n", err2)
@@ -331,8 +337,15 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	r.Header.Set("X-Proxy-Session-Key", key)
-	if h.tunnel.PassWebSocket(host, reply, w, r) {
+	var wsEntry sessionEntry
+	if err := json.Unmarshal([]byte(rawReply), &wsEntry); err != nil || wsEntry.Host != host {
+		http.Error(w, "session decode failed", http.StatusForbidden)
+		fmt.Printf("WebSocket session decode failed: %v\n", err)
+		return
+	}
+
+	r.Header.Set("X-Proxy-Session-Key", session)
+	if h.tunnel.PassWebSocket(host, wsEntry.Username, w, r) {
 		// WebSocket 連線已交由 tunnel 處理
 	} else {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -341,6 +354,21 @@ func (h *ProxyHandler) handleWebSocket(w http.ResponseWriter, r *http.Request, i
 }
 
 // --- 輔助函式 ---
+
+// validSessionFormat 驗證 session 是否符合 rand.Text() lowercase 的格式：
+// 固定 26 字元，字符集 [a-z2-7]（base32 lowercase）。
+// 使用 loop 而非 regex，26 次簡單整數比較效率更高。
+func validSessionFormat(s string) bool {
+	if len(s) != 26 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= '2' && c <= '7')) {
+			return false
+		}
+	}
+	return true
+}
 
 func parseCookies(r *http.Request) map[string]string {
 	result := make(map[string]string)

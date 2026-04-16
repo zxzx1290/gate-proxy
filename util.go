@@ -3,9 +3,8 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/md5"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,13 +18,13 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-func md5Hash(data string) string {
-	h := md5.Sum([]byte(data))
-	return fmt.Sprintf("%x", h)
+type sessionEntry struct {
+	Host     string `json:"host"`
+	Username string `json:"username"`
 }
 
-func sha256Hash(data string) string {
-	h := sha256.Sum256([]byte(data))
+func md5Hash(data string) string {
+	h := md5.Sum([]byte(data))
 	return fmt.Sprintf("%x", h)
 }
 
@@ -134,11 +133,14 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 		cookieExpires = time.Now().Add(time.Duration(aliveSec) * time.Second).UTC().Format(http.TimeFormat)
 	}
 
-	redisKey := sha256Hash(proxySession + host + cfg.Secret)
-	usernameB64 := base64.StdEncoding.EncodeToString([]byte(username))
+	entryJSON, err := json.Marshal(sessionEntry{Host: host, Username: username})
+	if err != nil {
+		fmt.Printf("loginSuccess json marshal session entry failed: %v\n", err)
+		return false
+	}
 
-	if err := rc.SetEX(redisKey, usernameB64, aliveSec); err != nil {
-		fmt.Printf("Redis SET 失敗: %v\n", err)
+	if err := rc.SetEX(proxySession, string(entryJSON), aliveSec); err != nil {
+		fmt.Printf("Redis SET failed: %v\n", err)
 		return false
 	}
 
@@ -156,7 +158,7 @@ func loginSuccess(cfg *Config, rc *RedisClient, proxySession, username string, l
 	resp := map[string]string{"code": "1", "data": getPrefixURL(cfg, host, "exroot")}
 	data, err := json.Marshal(resp)
 	if err != nil {
-		fmt.Printf("loginSuccess: json marshal failed: %v\n", err)
+		fmt.Printf("loginSuccess json marshal failed: %v\n", err)
 		return false
 	}
 	w.Write(data)
